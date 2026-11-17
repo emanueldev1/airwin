@@ -153,24 +153,13 @@ export function AudioPage() {
             <Play className="size-3.5 fill-current" /> Transmitir
           </Button>
         </Row>
-        <Row icon={FileAudio} title="Archivo de música" description="MP3, M4A, FLAC, WAV, OGG u Opus.">
-          {!state?.canPickFiles && (
-            <Input className="w-64" placeholder="Ruta del archivo" value={manualPath} onChange={(e) => setManualPath(e.target.value)} />
-          )}
-          <Button disabled={!ids.length || busy || (!state?.canPickFiles && !manualPath)} onClick={pickFile}>
-            Elegir archivo…
-          </Button>
-        </Row>
-      </Section>
-
-      <Section title="Avanzado">
         <Row
           icon={Timer}
           title="Retraso del audio"
-          description="Menos retraso responde antes, pero puede cortarse si el Wi-Fi es inestable. Se aplica al iniciar la transmisión."
+          description="Menos retraso responde antes, pero puede cortarse si el Wi-Fi es inestable. Se aplica al volver a pulsar Transmitir."
         >
           <Select
-            value={state?.settings.audio_latency ?? "balanced"}
+            value={state?.settings.audio_latency ?? "low"}
             onValueChange={(v) => call(() => api.post("settings", { audio_latency: v }))}
           >
             <SelectTrigger className="w-52">
@@ -183,7 +172,16 @@ export function AudioPage() {
             </SelectContent>
           </Select>
         </Row>
+        <Row icon={FileAudio} title="Archivo de música" description="MP3, M4A, FLAC, WAV, OGG u Opus.">
+          {!state?.canPickFiles && (
+            <Input className="w-64" placeholder="Ruta del archivo" value={manualPath} onChange={(e) => setManualPath(e.target.value)} />
+          )}
+          <Button disabled={!ids.length || busy || (!state?.canPickFiles && !manualPath)} onClick={pickFile}>
+            Elegir archivo…
+          </Button>
+        </Row>
       </Section>
+
 
       <p className="text-[12px] text-muted-foreground">
         AirPlay siempre tiene algo de retraso (también en un Mac): perfecto para música y videos, no para juegos. Con varios

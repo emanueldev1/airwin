@@ -71,7 +71,7 @@ SETTINGS = JsonStore(
         "cast_fps": 30,
         "cast_encoder": "libx264",
         "cast_bitrate": "6M",
-        "audio_latency": "balanced",
+        "audio_latency": "low",
         "update_auto_check": True,
         "update_auto_download": True,
     },

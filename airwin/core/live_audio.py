@@ -16,6 +16,8 @@ from typing import Optional
 
 import pyatv.protocols.raop as _raop
 import pyatv.protocols.raop.protocols as _raop_protocols
+import pyatv.protocols.raop.stream_client as _raop_stream
+from pyatv.protocols.raop import timing as _timing
 from pyatv.interface import MediaMetadata
 from pyatv.protocols.raop.audio_source import AudioSource
 
@@ -47,6 +49,10 @@ class LiveAudioSource(AudioSource):
         self._lock = threading.Lock()
         self._closed = False
         self._started = False
+        # Diagnóstico (se escribe en Registro cada 15 s)
+        self._stat_t = time.monotonic()
+        self._stat_padded = 0
+        self._stat_max = 0
 
     def _trim(self, keep_seconds: float) -> None:
         # Llamar con self._lock tomado.
@@ -97,8 +103,17 @@ class LiveAudioSource(AudioSource):
                 else:
                     out += chunk
             self._size -= len(out)
+            buffered = self._size
         if len(out) < wanted:  # subdesbordamiento: rellenar con silencio
+            self._stat_padded += wanted - len(out)
             out += bytes(wanted - len(out))
+        self._stat_max = max(self._stat_max, buffered)
+        if time.monotonic() - self._stat_t >= 15:
+            ms = 1000 / (SAMPLE_RATE * BYTES_PER_FRAME)
+            log.info("Audio en vivo: búfer máx. %d ms · silencio insertado %d ms en 15 s",
+                     self._stat_max * ms, self._stat_padded * ms)
+            self._stat_t = time.monotonic()
+            self._stat_padded = self._stat_max = 0
         # AirPlay (L16) espera las muestras en big-endian, igual que las fuentes de
         # pyatv (_to_audio_samples). Capturamos en little-endian: hay que invertir.
         samples = array.array("h", bytes(out))
@@ -294,7 +309,7 @@ _raop.open_source = _open_source
 def _latency_frames() -> int:
     from airwin.core.config import SETTINGS
 
-    return LATENCY_PRESETS.get(SETTINGS.get("audio_latency") or "balanced", LATENCY_PRESETS["balanced"])
+    return LATENCY_PRESETS.get(SETTINGS.get("audio_latency") or "low", LATENCY_PRESETS["low"])
 
 
 _original_reset = _raop_protocols.StreamContext.reset
@@ -306,3 +321,32 @@ def _reset_with_latency(self) -> None:  # type: ignore[no-untyped-def]
 
 
 _raop_protocols.StreamContext.reset = _reset_with_latency
+
+
+# pyatv fija el reloj de la transmisión (start_ts) en reset(), ANTES de enviar
+# metadatos, carátula, RECORD, FLUSH y volumen. Ese tiempo de conexión (D) pasa
+# sin enviar audio, así que los paquetes de sincronización le dicen al receptor
+# que el audio va D segundos tarde. Con audio en vivo, el HomePod compensa con un
+# búfer mucho mayor. Reanclamos el reloj justo antes del primer paquete: las
+# marcas RTP no cambian (start_ts y head_ts se desplazan igual), solo la hora
+# real que se asocia a ellas, que pasa a ser exacta.
+_original_stream_data = _raop_stream.StreamClient._stream_data
+
+
+async def _stream_data_anchored(self, source, transport):  # type: ignore[no-untyped-def]
+    if isinstance(source, LiveAudioSource):
+        ctx = self.context
+        now_ts = _timing.ntp2ts(_timing.ntp_now(), ctx.sample_rate)
+        shift = now_ts - ctx.head_ts
+        log.info(
+            "Conexión con el receptor: %d ms · retraso de AirPlay configurado: %d ms",
+            int(shift * 1000 / ctx.sample_rate),
+            int(ctx.latency * 1000 / ctx.sample_rate),
+        )
+        if shift > 0:
+            ctx.start_ts += shift
+            ctx.head_ts += shift
+    return await _original_stream_data(self, source, transport)
+
+
+_raop_stream.StreamClient._stream_data = _stream_data_anchored
