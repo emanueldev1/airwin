@@ -29,15 +29,55 @@ def test_hap_transient_pairing_srp():
     assert len(proof) == 64
 
 
-def test_live_audio_source_pads_silence():
+def test_live_audio_matches_pyatv_file_source(tmp_path=None):
+    """El audio en vivo debe salir con el mismo formato exacto que la ruta de
+    archivos de pyatv (la que funciona con HomePod). Si no, se oye estática."""
+    import math
+    import tempfile
+    import wave
+
+    from pyatv.protocols.raop.audio_source import FileSource
+
     from airwin.core.live_audio import LiveAudioSource, SystemAudioHub
 
+    n = 352
+    pcm = b"".join(
+        struct.pack("<hh", int(12000 * math.sin(2 * math.pi * 440 * i / 44100)), int(-7000 * math.sin(i / 7)))
+        for i in range(n)
+    )
+    path = Path(tempfile.mkdtemp()) / "tone.wav"
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(2)
+        w.setsampwidth(2)
+        w.setframerate(44100)
+        w.writeframes(pcm)
+
+    async def run():
+        ref = await FileSource.open(str(path), 44100, 2, 2)
+        expected = await ref.readframes(n)
+        live = LiveAudioSource(SystemAudioHub())
+        live.push(pcm)
+        got = await live.readframes(n)
+        return expected, got
+
+    expected, got = asyncio.run(run())
+    assert len(got) == len(expected) == n * 4
+    assert got == expected, "el audio en vivo no coincide con el formato de pyatv"
+
+
+def test_live_audio_pads_silence_and_trims_backlog():
+    from airwin.core.live_audio import BYTES_PER_FRAME, SAMPLE_RATE, LiveAudioSource, SystemAudioHub
+
     src = LiveAudioSource(SystemAudioHub())
-    src.push(struct.pack("<hh", 1000, -1000) * 10)
-    frames = asyncio.run(src.readframes(352))
-    assert len(frames) == 352 * 4
-    assert frames[:4] == struct.pack("<hh", 1000, -1000)
-    assert frames[-4:] == b"\x00\x00\x00\x00"
+    one_sec = b"\x01\x00" * 2 * SAMPLE_RATE
+    src.push(one_sec)  # 1 s acumulado mientras "conectaba"
+    assert src._size <= int(0.2 * SAMPLE_RATE) * BYTES_PER_FRAME
+    first = asyncio.run(src.readframes(352))
+    assert len(first) == 352 * 4
+    assert src._size <= int(0.03 * SAMPLE_RATE) * BYTES_PER_FRAME  # sin retraso acumulado
+    for _ in range(10):
+        asyncio.run(src.readframes(352))
+    assert asyncio.run(src.readframes(352)) == bytes(352 * 4)  # sin datos: silencio
 
 
 def test_version_parsing():

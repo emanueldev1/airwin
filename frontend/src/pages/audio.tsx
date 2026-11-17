@@ -1,5 +1,5 @@
 import * as React from "react"
-import { FileAudio, Mic2, Play, Square, Volume2 } from "lucide-react"
+import { FileAudio, Mic2, Play, Square, Timer, Volume2 } from "lucide-react"
 
 import { DeviceIcon, PageTitle, Row, Section } from "@/components/common"
 import { Button } from "@/components/ui/button"
@@ -163,8 +163,31 @@ export function AudioPage() {
         </Row>
       </Section>
 
+      <Section title="Avanzado">
+        <Row
+          icon={Timer}
+          title="Retraso del audio"
+          description="Menos retraso responde antes, pero puede cortarse si el Wi-Fi es inestable. Se aplica al iniciar la transmisión."
+        >
+          <Select
+            value={state?.settings.audio_latency ?? "balanced"}
+            onValueChange={(v) => call(() => api.post("settings", { audio_latency: v }))}
+          >
+            <SelectTrigger className="w-52">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent align="end">
+              <SelectItem value="low">Mínimo (≈ 0,5 s)</SelectItem>
+              <SelectItem value="balanced">Equilibrado (≈ 1 s)</SelectItem>
+              <SelectItem value="stable">Estable (≈ 1,5 s)</SelectItem>
+            </SelectContent>
+          </Select>
+        </Row>
+      </Section>
+
       <p className="text-[12px] text-muted-foreground">
-        AirPlay añade unos 2 segundos de búfer. Con varios altavoces a la vez puede haber una pequeña diferencia entre ellos.
+        AirPlay siempre tiene algo de retraso (también en un Mac): perfecto para música y videos, no para juegos. Con varios
+        altavoces a la vez puede haber una pequeña diferencia entre ellos.
       </p>
     </>
   )

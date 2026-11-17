@@ -39,7 +39,7 @@ WINGET_IDS = {"uxplay": "leapbtw.uxplay", "ffmpeg": "Gyan.FFmpeg", "bonjour": "A
 SETTING_KEYS = {
     "receiver_name", "receiver_fullscreen", "receiver_pin", "receiver_resolution", "receiver_fps",
     "receiver_audio_only", "uxplay_path", "ffmpeg_path", "media_port", "cast_fps", "cast_encoder",
-    "cast_bitrate", "theme", "update_auto_check", "update_auto_download",
+    "cast_bitrate", "theme", "update_auto_check", "update_auto_download", "audio_latency",
 }
 
 

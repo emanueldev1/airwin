@@ -6,13 +6,16 @@ directamente en `atv.stream.stream_file(...)`.
 """
 from __future__ import annotations
 
+import array
 import logging
+import sys
 import threading
 import time
 from collections import deque
 from typing import Optional
 
 import pyatv.protocols.raop as _raop
+import pyatv.protocols.raop.protocols as _raop_protocols
 from pyatv.interface import MediaMetadata
 from pyatv.protocols.raop.audio_source import AudioSource
 
@@ -22,7 +25,15 @@ SAMPLE_RATE = 44100
 CHANNELS = 2
 SAMPLE_SIZE = 2  # bytes (int16)
 BYTES_PER_FRAME = CHANNELS * SAMPLE_SIZE
-MAX_BUFFER_SECONDS = 0.6  # si se acumula más, se descarta lo viejo (evita retraso creciente)
+# Búfer entre la captura y el envío. Si crece (relojes que derivan), se recorta para
+# que el retraso nunca se acumule.
+MAX_BUFFER_SECONDS = 0.2
+TRIM_TO_SECONDS = 0.06
+# Al empezar a enviar se descarta lo capturado mientras se conectaba.
+START_KEEP_SECONDS = 0.03
+
+# Retraso de AirPlay (muestras a 44,1 kHz). pyatv usa 1,5 s por defecto.
+LATENCY_PRESETS = {"low": 22050, "balanced": 44100, "stable": 66150}
 
 
 class LiveAudioSource(AudioSource):
@@ -35,15 +46,30 @@ class LiveAudioSource(AudioSource):
         self._size = 0
         self._lock = threading.Lock()
         self._closed = False
+        self._started = False
+
+    def _trim(self, keep_seconds: float) -> None:
+        # Llamar con self._lock tomado.
+        keep = int(keep_seconds * SAMPLE_RATE) * BYTES_PER_FRAME
+        while self._size > keep and self._chunks:
+            excess = self._size - keep
+            chunk = self._chunks[0]
+            if len(chunk) <= excess:
+                self._chunks.popleft()
+                self._size -= len(chunk)
+            else:
+                cut = excess - excess % BYTES_PER_FRAME
+                self._chunks[0] = chunk[cut:]
+                self._size -= cut
+                break
 
     # -- llamado desde el hilo de captura --
     def push(self, data: bytes) -> None:
         with self._lock:
             self._chunks.append(data)
             self._size += len(data)
-            limit = int(MAX_BUFFER_SECONDS * SAMPLE_RATE) * BYTES_PER_FRAME
-            while self._size > limit and len(self._chunks) > 1:
-                self._size -= len(self._chunks.popleft())
+            if self._size > int(MAX_BUFFER_SECONDS * SAMPLE_RATE) * BYTES_PER_FRAME:
+                self._trim(TRIM_TO_SECONDS)
 
     # -- interfaz AudioSource de pyatv --
     def check_format(self, sample_rate: int, channels: int, sample_size: int) -> None:
@@ -59,6 +85,9 @@ class LiveAudioSource(AudioSource):
         wanted = nframes * BYTES_PER_FRAME
         out = bytearray()
         with self._lock:
+            if not self._started:
+                self._started = True
+                self._trim(START_KEEP_SECONDS)
             while self._chunks and len(out) < wanted:
                 chunk = self._chunks.popleft()
                 need = wanted - len(out)
@@ -70,7 +99,12 @@ class LiveAudioSource(AudioSource):
             self._size -= len(out)
         if len(out) < wanted:  # subdesbordamiento: rellenar con silencio
             out += bytes(wanted - len(out))
-        return bytes(out)
+        # AirPlay (L16) espera las muestras en big-endian, igual que las fuentes de
+        # pyatv (_to_audio_samples). Capturamos en little-endian: hay que invertir.
+        samples = array.array("h", bytes(out))
+        if sys.byteorder == "little":
+            samples.byteswap()
+        return samples.tobytes()
 
     async def get_metadata(self) -> MediaMetadata:
         return MediaMetadata(title=self._title, artist="AirWin", album="Windows")
@@ -255,3 +289,20 @@ async def _open_source(source, sample_rate, channels, sample_size):  # type: ign
 
 
 _raop.open_source = _open_source
+
+
+def _latency_frames() -> int:
+    from airwin.core.config import SETTINGS
+
+    return LATENCY_PRESETS.get(SETTINGS.get("audio_latency") or "balanced", LATENCY_PRESETS["balanced"])
+
+
+_original_reset = _raop_protocols.StreamContext.reset
+
+
+def _reset_with_latency(self) -> None:  # type: ignore[no-untyped-def]
+    _original_reset(self)
+    self.latency = _latency_frames()
+
+
+_raop_protocols.StreamContext.reset = _reset_with_latency

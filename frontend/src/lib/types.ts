@@ -30,6 +30,7 @@ export interface Settings {
   cast_encoder: string
   cast_bitrate: string
   theme?: "dark" | "light" | "system"
+  audio_latency: "low" | "balanced" | "stable"
   update_auto_check: boolean
   update_auto_download: boolean
 }
