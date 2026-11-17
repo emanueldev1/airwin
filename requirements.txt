@@ -1,0 +1,5 @@
+pyatv==0.18.0
+pywebview>=5.3
+soundcard>=0.4.3
+numpy>=1.26
+aiohttp>=3.9

@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.venv/
+build/
+dist/
+*.spec.bak
+node_modules/
+frontend/dist/
+airwin/web/
+.vite/
+*.log
+.DS_Store

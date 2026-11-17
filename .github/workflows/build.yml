@@ -1,0 +1,89 @@
+name: Compilar y publicar
+
+# - Cada push a main compila AirWin para Windows.
+# - Si la versión de airwin/__init__.py todavía no tiene release, se publica sola
+#   (crea la etiqueta vX.Y.Z y adjunta el instalador).
+# - Los pull requests solo compilan, para comprobar que nada se rompe.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Leer versión
+        id: version
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path airwin/__init__.py -Pattern '__version__ = "(.+)"').Matches[0].Groups[1].Value
+          "version=$v" >> $env:GITHUB_OUTPUT
+          $exists = git tag --list "v$v"
+          "release=$(if ($exists) { 'false' } else { 'true' })" >> $env:GITHUB_OUTPUT
+          Write-Host "Versión $v · ¿nueva release?: $(-not $exists)"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Interfaz
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Dependencias de Python
+        run: pip install -r requirements.txt pyinstaller
+
+      - name: Comprobación rápida
+        run: python -c "import airwin.server, airwin.core.live_audio, airwin.main; print('ok')"
+
+      - name: Ejecutable
+        run: pyinstaller AirWin.spec --noconfirm
+
+      - name: Instalador
+        shell: pwsh
+        run: |
+          choco install innosetup -y --no-progress
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.version.outputs.version }}" installer\AirWin.iss
+          Compress-Archive -Path dist\AirWin\* -DestinationPath "dist\AirWin-${{ steps.version.outputs.version }}-portable.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AirWin-${{ steps.version.outputs.version }}
+          path: |
+            dist/AirWin-Setup-*.exe
+            dist/AirWin-*-portable.zip
+
+      - name: Publicar release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.version.outputs.release == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: AirWin ${{ steps.version.outputs.version }}
+          generate_release_notes: true
+          files: |
+            dist/AirWin-Setup-*.exe
+            dist/AirWin-*-portable.zip
