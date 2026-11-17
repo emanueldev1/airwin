@@ -56,8 +56,10 @@ jobs:
       - name: Dependencias de Python
         run: pip install -r requirements.txt pyinstaller
 
-      - name: Comprobación rápida
-        run: python -c "import airwin.server, airwin.core.live_audio, airwin.main; print('ok')"
+      - name: Pruebas
+        run: |
+          python -c "import airwin.server, airwin.core.live_audio, airwin.main; print('imports ok')"
+          python tests/test_smoke.py
 
       - name: Ejecutable
         run: pyinstaller AirWin.spec --noconfirm

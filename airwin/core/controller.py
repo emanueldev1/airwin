@@ -13,6 +13,7 @@ from airwin.core.async_runner import AsyncRunner
 from airwin.core.casting import DIRECT_PLAY_EXT, HlsJob, cleanup_old_hls
 from airwin.core.config import SETTINGS
 from airwin.core.devices import DeviceManager
+from airwin.core.errors import friendly_error
 from airwin.core.media_server import MediaServer
 
 log = logging.getLogger(__name__)
@@ -52,7 +53,7 @@ class Controller:
         if self.audio_tasks.get(ident) is task:
             self.audio_tasks.pop(ident, None)
         if not task.cancelled() and task.exception():
-            log.error("La transmisión a %s falló: %s", name, task.exception())
+            log.error("La transmisión a %s se interrumpió: %s", name, friendly_error(task.exception()), exc_info=task.exception())
         else:
             log.info("Transmisión a %s terminada", name)
         self._notify()
@@ -129,7 +130,7 @@ class Controller:
             if job:
                 job.stop()
         if not task.cancelled() and task.exception():
-            log.error("Reproducción en el dispositivo falló: %s", task.exception())
+            log.error("La reproducción se interrumpió: %s", friendly_error(task.exception()), exc_info=task.exception())
         else:
             log.info("Reproducción terminada")
         self._notify()

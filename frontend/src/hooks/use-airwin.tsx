@@ -44,7 +44,7 @@ export function AirwinProvider({ children }: { children: React.ReactNode }) {
             break
           case "log":
             setLogs((l) => [...l.slice(-MAX_LINES), ev])
-            if (ev.level === "error") toast.error(ev.message)
+            if (ev.toast) toast.error(ev.summary ?? ev.message)
             break
           case "receiver":
             setReceiverLog((l) => [...l.slice(-MAX_LINES), ev.line])

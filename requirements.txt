@@ -1,4 +1,6 @@
 pyatv==0.18.0
+# srptools 2.x cambió su API y rompe el emparejamiento de HomePod/Apple TV en pyatv 0.18
+srptools==1.0.1
 pywebview>=5.3
 soundcard>=0.4.3
 numpy>=1.26

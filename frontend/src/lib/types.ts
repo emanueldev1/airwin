@@ -67,6 +67,8 @@ export interface LogLine {
   level: string
   time: number
   message: string
+  summary?: string
+  toast?: boolean
 }
 
 export interface Monitor {

@@ -45,7 +45,7 @@ export function LogsPage() {
             <span className="shrink-0 text-muted-foreground tabular-nums">{new Date(l.time * 1000).toLocaleTimeString()}</span>
             <span
               className={cn(
-                "whitespace-pre-wrap",
+                "min-w-0 break-words whitespace-pre-wrap",
                 l.level === "error" && "text-destructive",
                 l.level === "warning" && "text-warning"
               )}

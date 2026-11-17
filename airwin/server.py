@@ -11,6 +11,7 @@ import logging
 import os
 import secrets
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -23,6 +24,7 @@ from airwin.core.config import SETTINGS
 from airwin.core.controller import Controller
 from airwin.core.devices import PROTOCOL_LABELS, Device
 from airwin.core.monitors import list_monitors
+from airwin.core.errors import friendly_error
 from airwin.core.updater import Updater
 from airwin.core.receiver import AirPlayReceiver, find_bonjour, find_uxplay
 
@@ -210,8 +212,10 @@ class ApiServer:
             except web.HTTPException:
                 raise
             except Exception as exc:  # noqa: BLE001
-                log.exception("Error en %s", request.path)
-                return web.json_response({"error": str(exc) or type(exc).__name__}, status=400)
+                message = friendly_error(exc)
+                # La interfaz ya muestra el error de la petición: aquí solo se registra.
+                log.error("%s (%s)", message, request.path, exc_info=exc, extra={"no_toast": True})
+                return web.json_response({"error": message}, status=400)
         return await handler(request)
 
     async def _index(self, request: web.Request) -> web.StreamResponse:
@@ -521,9 +525,14 @@ class _SseLogHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
+            message = record.getMessage()
+            if record.exc_info:
+                # La traza completa va al Registro, nunca a las notificaciones.
+                message += "\n" + "".join(traceback.format_exception(*record.exc_info)).rstrip()
             self.server.emit_threadsafe({
                 "type": "log", "level": record.levelname.lower(), "time": record.created,
-                "message": self.format(record),
+                "message": message, "summary": record.getMessage(),
+                "toast": record.levelno >= logging.ERROR and not getattr(record, "no_toast", False),
             })
         except RuntimeError:
             pass
