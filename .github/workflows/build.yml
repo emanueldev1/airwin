@@ -68,6 +68,11 @@ jobs:
           choco install innosetup -y --no-progress
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=${{ steps.version.outputs.version }}" installer\AirWin.iss
           Compress-Archive -Path dist\AirWin\* -DestinationPath "dist\AirWin-${{ steps.version.outputs.version }}-portable.zip"
+          # Firmas para que el actualizador integrado verifique la descarga.
+          Get-ChildItem dist\AirWin-Setup-*.exe, dist\AirWin-*-portable.zip | ForEach-Object {
+            "$((Get-FileHash $_ -Algorithm SHA256).Hash.ToLower())  $($_.Name)"
+          } | Set-Content -Encoding ascii dist\SHA256SUMS.txt
+          Get-Content dist\SHA256SUMS.txt
 
       - uses: actions/upload-artifact@v4
         with:
@@ -75,6 +80,7 @@ jobs:
           path: |
             dist/AirWin-Setup-*.exe
             dist/AirWin-*-portable.zip
+            dist/SHA256SUMS.txt
 
       - name: Publicar release
         if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.version.outputs.release == 'true'
@@ -87,3 +93,4 @@ jobs:
           files: |
             dist/AirWin-Setup-*.exe
             dist/AirWin-*-portable.zip
+            dist/SHA256SUMS.txt

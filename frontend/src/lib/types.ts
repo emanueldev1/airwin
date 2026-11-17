@@ -10,6 +10,7 @@ export interface Device {
   needsPairing: string[]
   paired: string[]
   pairable: { id: string; label: string }[]
+  hasScreen: boolean
   canAudio: boolean
   canVideo: boolean
   canRemote: boolean
@@ -29,6 +30,8 @@ export interface Settings {
   cast_encoder: string
   cast_bitrate: string
   theme?: "dark" | "light" | "system"
+  update_auto_check: boolean
+  update_auto_download: boolean
 }
 
 export interface AppState {
@@ -45,6 +48,19 @@ export interface AppState {
   installing: string[]
   encoders: Record<string, string>
   canPickFiles: boolean
+  update: UpdateState
+}
+
+export interface UpdateState {
+  status: "idle" | "checking" | "uptodate" | "available" | "downloading" | "ready" | "installing" | "error"
+  current: string
+  latest: string | null
+  notes: string
+  url: string
+  progress: number
+  error: string | null
+  checked_at: number | null
+  can_install: boolean
 }
 
 export interface LogLine {

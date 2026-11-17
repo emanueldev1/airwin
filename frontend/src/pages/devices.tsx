@@ -13,15 +13,13 @@ import { api } from "@/lib/api"
 import type { Device } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
-const FEATURES: [string, string][] = [
-  ["RAOP", "Audio"],
-  ["AirPlay", "Video"],
-  ["Companion", "Mando"],
-  ["MRP", "Mando"],
-]
-
+/** Lo que el usuario puede hacer con el dispositivo (no los protocolos que anuncia). */
 function features(d: Device) {
-  return [...new Set(FEATURES.filter(([p]) => d.protocols.includes(p)).map(([, l]) => l))].join(", ")
+  const f: string[] = []
+  if (d.canAudio) f.push("Audio")
+  if (d.canVideo) f.push("Video")
+  if (d.canRemote && d.hasScreen) f.push("Mando")
+  return f.join(", ")
 }
 
 export function DevicesPage() {
@@ -81,7 +79,7 @@ export function DevicesPage() {
               >
                 <span className="flex items-center gap-2 text-[12px] text-muted-foreground">
                   <StatusDot tone={pending ? "warn" : "ok"} />
-                  {pending ? "Sin emparejar" : d.paired.length ? "Emparejado" : "Disponible"}
+                  {pending ? "Sin emparejar" : d.paired.length ? "Emparejado" : "Listo"}
                 </span>
                 {d.pairable.length > 0 && (
                   <Button variant={pending ? "default" : "secondary"} onClick={() => setPairing(d)}>

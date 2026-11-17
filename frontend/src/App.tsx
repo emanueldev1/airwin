@@ -5,6 +5,7 @@ import {
 
 import { AppIcon, StatusDot, type Theme } from "@/components/common"
 import { Toaster } from "@/components/ui/sonner"
+import { UpdateBanner } from "@/components/update-banner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AirwinProvider, useAirwin, useScan } from "@/hooks/use-airwin"
 import { cn } from "@/lib/utils"
@@ -87,7 +88,13 @@ function StatusBar() {
         <StatusDot tone={state?.receiver.running ? "live" : "off"} />
         Receptor {state?.receiver.running ? "activo" : "inactivo"}
       </span>
-      <span>v{state?.version}</span>
+      {state?.update && ["available", "downloading", "ready"].includes(state.update.status) ? (
+        <span className="text-primary">
+          {state.update.status === "ready" ? "Actualización lista" : `v${state.update.latest} disponible`}
+        </span>
+      ) : (
+        <span>v{state?.version}</span>
+      )}
     </footer>
   )
 }
@@ -153,6 +160,7 @@ function Shell() {
 
         <main className="min-w-0 flex-1 overflow-y-auto">
           <div className="mx-auto max-w-[1000px] px-10 pt-6 pb-10">
+            <UpdateBanner />
             {page === "devices" && <DevicesPage />}
             {page === "audio" && <AudioPage />}
             {page === "video" && <VideoPage />}

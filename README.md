@@ -26,7 +26,8 @@ Envía el sonido de Windows a tus HomePod · Manda videos al Apple TV · Duplica
 | 🖥️ | **Proyectar el escritorio de Windows en el Apple TV**, con sonido | FFmpeg (gdigrab + NVENC/QSV/AMF/x264) → HLS en vivo |
 | 📥 | **Recibir AirPlay**: el PC aparece en «Duplicar pantalla» del iPhone, iPad y Mac, y como altavoz AirPlay | [UxPlay](https://github.com/FDH2/UxPlay) |
 | 🎮 | **Mando a distancia** del Apple TV: cruceta, menú, inicio, volumen, encendido, apps, teclado, «Ahora suena» | pyatv (Companion / MRP) |
-| 🔗 | **Emparejamiento con PIN**, como en un Mac; las credenciales se guardan en tu PC | pyatv |
+| 🔗 | **Emparejamiento con PIN** para Apple TV y Mac, como en un Mac (los HomePod no lo necesitan) | pyatv |
+| ⬆️ | **Actualizaciones automáticas**: descarga en segundo plano, verificación SHA-256 e instalación con un clic | GitHub Releases + Inno Setup |
 
 ### Lo que Apple no permite (y lo que hacemos en su lugar)
 
@@ -46,6 +47,7 @@ En la otra dirección (**del iPhone/Mac al PC**) la duplicación sí es en tiemp
 1. Descarga `AirWin-Setup-x.y.z.exe` de [Releases](https://github.com/emanueldev1/airwin/releases/latest) e instálalo (o el `.zip` portable si no quieres instalar nada).
    Windows SmartScreen puede avisar porque el instalador no está firmado: pulsa **Más información → Ejecutar de todas formas**.
 2. Abre AirWin. Si Windows pregunta por el firewall, permite el acceso en **redes privadas**.
+   AirWin se instala solo para tu usuario (en `%LOCALAPPDATA%\Programs\AirWin`) y no pide permisos de administrador.
 3. Para **recibir AirPlay** o **proyectar la pantalla**, ve a **Configuración → Componentes** e instala con un clic:
    - **Bonjour** de Apple, para que tu iPhone vea el PC.
    - **UxPlay**, el receptor AirPlay.
@@ -57,7 +59,13 @@ En la otra dirección (**del iPhone/Mac al PC**) la duplicación sí es en tiemp
 
 ### Emparejar un Apple TV
 
-**Dispositivos → Emparejar** y escribe el PIN que aparece en la tele. Empareja **AirPlay** (videos y pantalla) y **Companion** (mando a distancia). Los HomePod normalmente no necesitan emparejamiento.
+**Dispositivos → Emparejar** y escribe el PIN que aparece en la tele. Empareja **AirPlay** (videos y pantalla) y **Companion** (mando a distancia). Los HomePod y los altavoces no tienen pantalla, así que no se emparejan: AirWin se conecta a ellos directamente.
+
+### Actualizaciones
+
+AirWin busca versiones nuevas al abrirse y cada 6 horas, y las descarga en segundo plano. Cuando una está lista aparece **«Reiniciar y actualizar»**: se instala en silencio y la app vuelve a abrirse. Puedes desactivarlo en **Configuración → Actualizaciones**. La versión portable (`.zip`) avisa de las novedades, pero se actualiza a mano.
+
+> Si instalaste la **1.0.0**, desinstálala antes de instalar la 1.1.0. Esa versión se instalaba en *Archivos de programa* y no incluía el actualizador; desde la 1.1.0 todo es automático.
 
 ## Cómo funciona
 
@@ -101,7 +109,7 @@ Para sacar una versión nueva:
 1. Cambia `__version__` en `airwin/__init__.py` (por ejemplo, de `1.0.0` a `1.1.0`).
 2. Haz commit y push a `main`.
 
-Las notas de la release se generan solas a partir de los commits y *pull requests*.
+Las notas de la release se generan solas a partir de los commits y *pull requests*. Las copias instaladas de AirWin detectan la versión nueva y se actualizan solas. El workflow publica también un `SHA256SUMS.txt`, que el actualizador usa para verificar la descarga.
 
 **Desarrollo con recarga en caliente:** `scripts\dev.ps1` (o `scripts/dev.sh`) arranca el motor y Vite. Abre <http://localhost:5173>.
 
@@ -123,6 +131,7 @@ Sin compilar: `pip install -r requirements.txt`, `cd frontend && npm i && npm ru
 
 - [ ] Sincronización precisa multiroom (AirPlay 2 con PTP)
 - [ ] Icono en la bandeja del sistema y arranque con Windows
+- [ ] Firmar el instalador (evita el aviso de SmartScreen)
 - [ ] Traducción al inglés
 - [ ] Recibir audio con metadatos (carátula y título) en la interfaz
 

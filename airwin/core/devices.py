@@ -23,6 +23,9 @@ PROTOCOL_LABELS = {
 }
 
 
+PAIRABLE_ORDER = [Protocol.AirPlay, Protocol.Companion, Protocol.MRP, Protocol.RAOP]
+
+
 @dataclass
 class Device:
     identifier: str
@@ -55,12 +58,32 @@ class Device:
             "TV con AirPlay": "🖥️",
         }.get(self.kind, "🎵")
 
+    @property
+    def has_screen(self) -> bool:
+        """Sólo los equipos con pantalla pueden mostrar un PIN de emparejamiento."""
+        return self.kind in ("Apple TV", "Mac", "TV con AirPlay")
+
+    def pairable_protocols(self) -> list[Protocol]:
+        """Protocolos que tiene sentido emparejar con un PIN.
+
+        Los HomePod y altavoces no tienen pantalla: pyatv los autoriza solo
+        (emparejamiento transitorio), así que nunca se ofrece emparejarlos.
+        En un Apple TV, RAOP queda cubierto por las credenciales de AirPlay.
+        """
+        if not self.has_screen:
+            return []
+        wanted = (PairingRequirement.Mandatory, PairingRequirement.Optional)
+        protos = [p for p in PAIRABLE_ORDER if self.pairing.get(p) in wanted]
+        if Protocol.AirPlay in protos and Protocol.RAOP in protos:
+            protos.remove(Protocol.RAOP)
+        return protos
+
     def needs_pairing(self) -> list[Protocol]:
         stored = CREDENTIALS.get(self.identifier, {}) or {}
         return [
             proto
-            for proto, req in self.pairing.items()
-            if req == PairingRequirement.Mandatory and proto.name not in stored
+            for proto in self.pairable_protocols()
+            if self.pairing.get(proto) == PairingRequirement.Mandatory and proto.name not in stored
         ]
 
 

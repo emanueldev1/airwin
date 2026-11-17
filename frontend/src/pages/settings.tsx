@@ -1,10 +1,14 @@
 import * as React from "react"
-import { Bug, Clapperboard, ExternalLink, FolderOpen, Loader2, Network, Palette, Radar, Router } from "lucide-react"
+import {
+  Bug, Clapperboard, CloudDownload, ExternalLink, FolderOpen, Loader2, Network, Palette, Radar, RefreshCw, Router,
+} from "lucide-react"
 
 import { AppIcon, PageTitle, Row, Section, StatusDot, type Theme } from "@/components/common"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { ReleaseNotesDialog, useUpdateActions } from "@/components/update-banner"
 import { useAirwin } from "@/hooks/use-airwin"
 import { api } from "@/lib/api"
 import type { Settings } from "@/lib/types"
@@ -21,6 +25,32 @@ export function SettingsPage({ theme, setTheme }: { theme: Theme; setTheme: (t: 
   const { state, call } = useAirwin()
   const [paths, setPaths] = React.useState<Partial<Settings> | null>(null)
   const values = paths ?? state?.settings ?? {}
+  const u = state?.update
+  const { check, download, install } = useUpdateActions()
+  const [notes, setNotes] = React.useState(false)
+  const setFlag = (key: keyof Settings, v: boolean) => call(() => api.post("settings", { [key]: v }))
+
+  const updateText = () => {
+    if (!u) return ""
+    switch (u.status) {
+      case "checking":
+        return "Buscando actualizaciones…"
+      case "uptodate":
+        return `Tienes la versión más reciente (${u.current}).`
+      case "available":
+        return u.error ? `Versión ${u.latest} disponible. ${u.error}` : `Versión ${u.latest} disponible.`
+      case "downloading":
+        return `Descargando la versión ${u.latest}… ${Math.round(u.progress * 100)} %`
+      case "ready":
+        return `La versión ${u.latest} está lista para instalarse.`
+      case "installing":
+        return "Instalando…"
+      case "error":
+        return u.error ?? "No se pudo comprobar."
+      default:
+        return `Versión instalada: ${u.current}`
+    }
+  }
 
   const savePath = (key: keyof Settings, value: string) => call(() => api.post("settings", { [key]: value }))
   const browse = async (key: keyof Settings) => {
@@ -57,6 +87,65 @@ export function SettingsPage({ theme, setTheme }: { theme: Theme; setTheme: (t: 
             onBlur={(e) => call(() => api.post("settings", { media_port: Number(e.target.value) }))}
           />
         </Row>
+      </Section>
+
+      <Section title="Actualizaciones">
+        <Row
+          icon={u?.status === "available" || u?.status === "ready" ? CloudDownload : RefreshCw}
+          title={updateText()}
+          description={
+            u?.checked_at
+              ? `Última comprobación: ${new Date(u.checked_at * 1000).toLocaleString()}`
+              : u?.can_install === false
+                ? "Esta copia no está instalada: las versiones nuevas se descargan desde GitHub."
+                : undefined
+          }
+        >
+          {(u?.status === "available" || u?.status === "ready") && (
+            <Button variant="ghost" onClick={() => setNotes(true)}>
+              Novedades
+            </Button>
+          )}
+          {u?.status === "ready" ? (
+            <Button variant="default" onClick={() => install()}>
+              Reiniciar y actualizar
+            </Button>
+          ) : u?.status === "available" ? (
+            u.can_install ? (
+              <Button variant="default" onClick={() => download()}>
+                Descargar
+              </Button>
+            ) : (
+              <Button variant="default" asChild>
+                <a href={u.url} target="_blank" rel="noreferrer">
+                  Descargar <ExternalLink className="size-3.5" />
+                </a>
+              </Button>
+            )
+          ) : (
+            <Button disabled={u?.status === "checking" || u?.status === "downloading"} onClick={() => check()}>
+              {u?.status === "checking" && <Loader2 className="animate-spin" />}
+              Buscar actualizaciones
+            </Button>
+          )}
+        </Row>
+        <Row icon={RefreshCw} title="Buscar actualizaciones automáticamente" description="Al abrir la app y cada 6 horas.">
+          <Switch
+            checked={state?.settings.update_auto_check ?? true}
+            onCheckedChange={(v) => setFlag("update_auto_check", v)}
+          />
+        </Row>
+        <Row
+          icon={CloudDownload}
+          title="Descargar en segundo plano"
+          description="Cuando esté lista, solo tendrás que reiniciar la app para actualizarla."
+        >
+          <Switch
+            checked={state?.settings.update_auto_download ?? true}
+            onCheckedChange={(v) => setFlag("update_auto_download", v)}
+          />
+        </Row>
+        <ReleaseNotesDialog open={notes} onOpenChange={setNotes} />
       </Section>
 
       <Section title="Componentes">

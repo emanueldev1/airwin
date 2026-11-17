@@ -6,7 +6,6 @@ import logging
 from pathlib import Path
 from typing import Callable, Optional
 
-from pyatv.const import Protocol
 from pyatv.interface import MediaMetadata
 
 from airwin.core import live_audio
@@ -194,4 +193,3 @@ class Controller:
         self.runner.stop()
 
 
-PAIRABLE = [Protocol.AirPlay, Protocol.Companion, Protocol.RAOP, Protocol.MRP]

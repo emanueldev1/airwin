@@ -20,9 +20,10 @@ from pyatv.const import Protocol
 from airwin import APP_NAME, __version__
 from airwin.core.casting import ENCODERS, find_ffmpeg
 from airwin.core.config import SETTINGS
-from airwin.core.controller import PAIRABLE, Controller
+from airwin.core.controller import Controller
 from airwin.core.devices import PROTOCOL_LABELS, Device
 from airwin.core.monitors import list_monitors
+from airwin.core.updater import Updater
 from airwin.core.receiver import AirPlayReceiver, find_bonjour, find_uxplay
 
 log = logging.getLogger(__name__)
@@ -36,7 +37,7 @@ WINGET_IDS = {"uxplay": "leapbtw.uxplay", "ffmpeg": "Gyan.FFmpeg", "bonjour": "A
 SETTING_KEYS = {
     "receiver_name", "receiver_fullscreen", "receiver_pin", "receiver_resolution", "receiver_fps",
     "receiver_audio_only", "uxplay_path", "ffmpeg_path", "media_port", "cast_fps", "cast_encoder",
-    "cast_bitrate", "theme",
+    "cast_bitrate", "theme", "update_auto_check", "update_auto_download",
 }
 
 
@@ -53,17 +54,24 @@ def _device_json(d: Device) -> dict[str, Any]:
         "protocols": [p.name for p in d.protocols],
         "needsPairing": [p.name for p in d.needs_pairing()],
         "paired": list(stored.keys()),
-        "pairable": [{"id": p.name, "label": PROTOCOL_LABELS[p]} for p in PAIRABLE if p in d.protocols],
+        "pairable": [{"id": p.name, "label": PROTOCOL_LABELS[p]} for p in d.pairable_protocols()],
+        "hasScreen": d.has_screen,
         "canAudio": d.can_stream_audio,
-        "canVideo": Protocol.AirPlay in d.protocols and d.kind != "HomePod",
+        "canVideo": Protocol.AirPlay in d.protocols and d.has_screen,
         "canRemote": d.can_remote,
     }
 
 
 class ApiServer:
-    def __init__(self, ctl: Controller, pick_file: Optional[Callable[[str], Optional[str]]] = None) -> None:
+    def __init__(
+        self,
+        ctl: Controller,
+        pick_file: Optional[Callable[[str], Optional[str]]] = None,
+        quit_app: Optional[Callable[[], None]] = None,
+    ) -> None:
         self.ctl = ctl
         self.pick_file = pick_file
+        self.quit_app = quit_app
         self.token = os.environ.get("AIRWIN_TOKEN") or secrets.token_urlsafe(24)
         self.port = 0
         self.loop = ctl.runner.loop
@@ -77,6 +85,7 @@ class ApiServer:
             on_exit=lambda code: self.loop.call_soon_threadsafe(self._receiver_exited, code),
         )
         ctl.on_stream_state = lambda: self.loop.call_soon_threadsafe(self.push_state)
+        self.updater = Updater(on_change=self.push_state)
         handler = _SseLogHandler(self)
         handler.setLevel(logging.INFO)
         logging.getLogger().addHandler(handler)
@@ -109,6 +118,7 @@ class ApiServer:
             "installing": sorted(self._installing),
             "encoders": ENCODERS,
             "canPickFiles": self.pick_file is not None,
+            "update": self.updater.as_dict(),
         }
 
     def push_state(self) -> None:
@@ -161,6 +171,9 @@ class ApiServer:
         r.add_post("/api/settings", self._settings)
         r.add_post("/api/pick", self._pick)
         r.add_post("/api/deps/install", self._install_dep)
+        r.add_post("/api/update/check", self._update_check)
+        r.add_post("/api/update/download", self._update_download)
+        r.add_post("/api/update/install", self._update_install)
         r.add_get("/", self._index)
         if WEB_DIR.exists():
             r.add_static("/assets", WEB_DIR / "assets")
@@ -180,6 +193,7 @@ class ApiServer:
         else:
             raise RuntimeError("No hay puertos libres para la interfaz")
         log.info("Interfaz disponible en %s", self.url)
+        self.updater.start_background()
 
     @property
     def url(self) -> str:
@@ -473,6 +487,27 @@ class ApiServer:
         finally:
             self._installing.discard(name)
             self.push_state()
+
+    # ------------------------------------------------------------------ actualizaciones
+    async def _update_check(self, request: web.Request) -> web.Response:
+        await self.updater.check()
+        if self.updater.state.status == "uptodate":
+            self.toast(f"AirWin {self.updater.state.current} es la versión más reciente", "success")
+        return self._ok()
+
+    async def _update_download(self, request: web.Request) -> web.Response:
+        if not self.updater.state.can_install:
+            raise RuntimeError("Esta copia no se puede actualizar sola. Descarga la nueva versión desde GitHub.")
+        await self.updater.download()
+        return self._ok()
+
+    async def _update_install(self, request: web.Request) -> web.Response:
+        self.updater.install()
+        # Dar tiempo a que la respuesta llegue a la interfaz y cerrar la app.
+        await self.shutdown()
+        if self.quit_app:
+            self.loop.call_later(0.8, self.quit_app)
+        return self._ok()
 
     async def shutdown(self) -> None:
         await asyncio.get_running_loop().run_in_executor(None, self.receiver.stop)

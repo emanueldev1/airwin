@@ -68,7 +68,15 @@ def main() -> None:
         except Exception as exc:  # noqa: BLE001
             log.warning("pywebview no disponible (%s); se usará el navegador", exc)
 
-    server = ApiServer(ctl, pick_file if webview_mod else None)
+    stop = threading.Event()
+
+    def quit_app() -> None:
+        win = window.get("w")
+        if win is not None:
+            win.destroy()
+        stop.set()
+
+    server = ApiServer(ctl, pick_file if webview_mod else None, quit_app)
     ctl.runner.run_sync(server.start(args.port))
     url = server.url
     log.info("%s iniciado", APP_NAME)
@@ -93,9 +101,9 @@ def main() -> None:
     if not args.headless:
         webbrowser.open(url)
     print(f"{APP_NAME} en {url}  (Ctrl+C para salir)")
-    stop = threading.Event()
     try:
-        stop.wait()
+        while not stop.wait(0.5):
+            pass
     except KeyboardInterrupt:
         pass
     shutdown()
